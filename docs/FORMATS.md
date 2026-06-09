@@ -1,6 +1,6 @@
 # MyGameBuilder archive - piece file formats
 
-This document is a companion to [`README.md`](./README.md). It describes
+This document is a companion to [`ARCHIVE.md`](./ARCHIVE.md). It describes
 the byte-level format of every archived object body, so the archive can
 be read without the original Flash client.
 
@@ -32,7 +32,7 @@ sibling** file next to the raw body — `<name>.xml` for actors,
 `<name>.json` for maps, and `<name>.txt` for tutorials and profiles.
 The decoded siblings are derived artifacts produced from the raw body
 using the rules below; the raw body remains the canonical archived
-form. See [`README.md`](./README.md) §3.4 for the sibling-file layout. All user and system folders are under `JGI_test1/`, and the client snapshot is under `client/`.
+form. See [`ARCHIVE.md`](./ARCHIVE.md) §3.4 for the sibling-file layout. All user and system folders are under `JGI_test1/`, and the client snapshot is under `client/`.
 
 ---
 
@@ -47,7 +47,7 @@ is appended on disk so the file previews directly; the S3 key itself
 does not include it — read the sidecar's `key` field for the original
 S3 key.)
 
-(See `README.md` §6 for the subset of tile bodies that were intentionally
+(See `ARCHIVE.md` §6 for the subset of tile bodies that were intentionally
 replaced.)
 
 ---

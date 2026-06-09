@@ -1,0 +1,25 @@
+{
+  "dotnet.defaultSolution": "mygamebuilder-archive.slnx",
+  "editor.formatOnSave": true,
+  "files.eol": "\n",
+  "[csharp]": {
+    "editor.defaultFormatter": "ms-dotnettools.csharp"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "cSpell.words": [
+    "ASPNETCORE",
+    "blobencoding",
+    "dotnet",
+    "JGI",
+    "mygamebuilder",
+    "piecetype",
+    "slnx",
+    "tilename",
+    "vsconfig"
+  ]
+}

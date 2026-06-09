@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch S3 Archiver",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-s3",
+      "program": "${workspaceFolder}/src/MyGameBuilder.Archive.S3/bin/Debug/net10.0/MyGameBuilder.Archive.S3.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Launch Frontend Archiver",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-frontend",
+      "program": "${workspaceFolder}/src/MyGameBuilder.Archive.Frontend/bin/Debug/net10.0/MyGameBuilder.Archive.Frontend.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "console": "integratedTerminal"
+    }
+  ]
+}
