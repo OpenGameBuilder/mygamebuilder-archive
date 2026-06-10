@@ -432,3 +432,7 @@ FodyWeavers.xsd
 # The full archive snapshot is large static content supplied out-of-band, not source.
 archive/
 artifacts/
+archive-work/
+*.inprogress.sqlite
+*.inprogress.sqlite-shm
+*.inprogress.sqlite-wal

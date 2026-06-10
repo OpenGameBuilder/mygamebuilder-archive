@@ -5,4 +5,14 @@
     <AssemblyName>MyGameBuilder.Archive.S3</AssemblyName>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\docs\schema-draft.sql" Link="schema-draft.sql" />
+  </ItemGroup>
+
 </Project>

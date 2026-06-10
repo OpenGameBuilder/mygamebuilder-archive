@@ -14,10 +14,18 @@
   <Folder Name="/docs/">
     <File Path="docs/ARCHIVE.md" />
     <File Path="docs/DEVELOPMENT.md" />
+    <File Path="docs/FRONTEND.md" />
     <File Path="docs/FORMATS.md" />
+    <File Path="docs/schema-draft.sql" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/MyGameBuilder.Archive.Frontend/MyGameBuilder.Archive.Frontend.csproj" />
     <Project Path="src/MyGameBuilder.Archive.S3/MyGameBuilder.Archive.S3.csproj" />
+    <Project Path="src/MyGameBuilder.Archive.S3.Redactor/MyGameBuilder.Archive.S3.Redactor.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MyGameBuilder.Archive.Frontend.Tests/MyGameBuilder.Archive.Frontend.Tests.csproj" />
+    <Project Path="tests/MyGameBuilder.Archive.S3.Redactor.Tests/MyGameBuilder.Archive.S3.Redactor.Tests.csproj" />
+    <Project Path="tests/MyGameBuilder.Archive.S3.Tests/MyGameBuilder.Archive.S3.Tests.csproj" />
   </Folder>
 </Solution>
