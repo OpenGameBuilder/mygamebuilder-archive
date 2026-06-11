@@ -1,17 +1,18 @@
-# MyGameBuilder archive - piece file formats
+# MyGameBuilder archive - piece body formats
 
-This document is a companion to [`ARCHIVE.md`](./ARCHIVE.md). It describes
-the byte-level format of every archived object body, so the archive can
-be read without the original Flash client.
+This document is a companion to [`S3_ARCHIVE.md`](./S3_ARCHIVE.md). It
+describes the byte-level format of every archived object body, so the archive
+can be read without the original Flash client.
 
-Every archived object has a `piecetype` (the directory name it lives in)
-that determines how its body bytes are interpreted. The archive stores
-the body **exactly as it was served from S3** - i.e. the same bytes the
+Every archived MyGameBuilder object has a `piecetype` from its S3 key
+projection that determines how its body bytes are interpreted. The archive
+stores the body **exactly as it was served from S3** - i.e. the same bytes the
 client receives before any decoding.
 
-The `x-amz-meta-*` headers (mirrored under `amz_meta` in each
-`.meta.json`) carry a small set of common fields that complement the
-body for every piece type:
+The captured `x-amz-meta-*` headers carry a small set of common fields that
+complement the body for every piece type. In the SQLite archive, the known
+fields are exposed as `meta_*` columns and any extra user metadata is stored in
+`s3_user_metadata_extra`.
 
 | `amz_meta` key  | Meaning |
 | --- | --- |
@@ -21,18 +22,16 @@ body for every piece type:
 | `comment`         | Author-supplied description, if any. |
 | `acl`             | Original S3 ACL string (typically `"null"` or `"public-read"`). |
 
-The `content_type` recorded in the sidecar is `image/png` for tiles and
-`text/plain` for the other piece types (the client looks at
-`piecetype`, not the HTTP type, to decide how to parse the body).
+The captured `content_type` is normally `image/png` for tiles and `text/plain`
+for the other piece types (the client looks at `piecetype`, not the HTTP type,
+to decide how to parse the body). Some historical objects have no captured
+`Content-Type`; the body format is still determined by the S3 key projection.
 
 
 For the piece types whose raw body is not in a human-readable format
-(actor, map, tutorial, profile), the archive also stores a **decoded
-sibling** file next to the raw body — `<name>.xml` for actors,
-`<name>.json` for maps, and `<name>.txt` for tutorials and profiles.
-The decoded siblings are derived artifacts produced from the raw body
-using the rules below; the raw body remains the canonical archived
-form. See [`ARCHIVE.md`](./ARCHIVE.md) §3.4 for the sibling-file layout. All user and system folders are under `JGI_test1/`, and the client snapshot is under `client/`.
+(actor, map, tutorial, profile), the rules below describe how to decode the raw
+SQLite BLOB into a readable form. Decoded XML, JSON, or text files are derived
+artifacts; the canonical archive stores the original body bytes.
 
 ---
 
@@ -41,14 +40,11 @@ form. See [`ARCHIVE.md`](./ARCHIVE.md) §3.4 for the sibling-file layout. All us
 Tile bodies are **plain PNG files**, byte-for-byte. They start with the
 standard PNG signature (`89 50 4E 47 0D 0A 1A 0A`) and can be opened
 with any image tool. `amz_meta.width` / `height` mirror the PNG's pixel
-dimensions. There is no extra wrapping or base64 layer in the archive;
-the file under `…/tile/<name>.png` *is* the image. (The `.png` suffix
-is appended on disk so the file previews directly; the S3 key itself
-does not include it — read the sidecar's `key` field for the original
-S3 key.)
+dimensions. There is no extra wrapping or base64 layer in the archive; the body
+BLOB for a `tile` piece is the image.
 
-(See `ARCHIVE.md` §6 for the subset of tile bodies that were intentionally
-replaced.)
+(See [`S3_ARCHIVE.md`](./S3_ARCHIVE.md) for the subset of tile bodies that were
+intentionally replaced in redacted releases.)
 
 ---
 
@@ -171,9 +167,9 @@ action | tilename | effect
   `melee north 1..8`, `melee east 1..8`, `melee south 1..8`,
   `melee west 1..8`, `stationary north 1..16`, `stationary east 1..16`,
   `stationary south 1..16`, `stationary west 1..16`.
-`tilename` - the name of a tile piece (resolved in the actor's own
+- `tilename` - the name of a tile piece (resolved in the actor's own
 project first, then `!system`). Empty means "no frame for this
-animation slot". All user and system folders are under `JGI_test1/`.
+animation slot".
 - `effect`   - rendering hint for the frame. Observed values are
   `"no effect"` (overwhelmingly the most common), `"rotate90"`,
   `"rotate180"`, `"rotate270"`, `"flipX"`, `"flipY"`, and the empty
@@ -214,8 +210,8 @@ There are always **four layers**, in this exact order:
 | 2 | Foreground | Name of a tile-actor (drawn over the Active layer). |
 | 3 | Event      | Event marker for that cell (see below). |
 
-Layers 0–2 store **actor names** that reference actor pieces in the
-same project (or under `!system` in `JGI_test1/`); an empty UTF string means the cell
+Layers 0-2 store **actor names** that reference actor pieces in the
+same project (or under `!system`); an empty UTF string means the cell
 on that layer is empty. The fourth "Event" layer is **persisted**, not
 just runtime state: it is part of the saved blob whenever a map is
 savd. It is, however, often empty - many maps carry the layer with
@@ -292,22 +288,20 @@ before the next `#`), which decodes as an empty `rewardResult`.
 
 ## 5. `screenshot/` - PNG image
 
-Screenshots are PNGs of a rendered map, stored the same way as tiles
-(raw PNG bytes, no wrapping, with a `.png` suffix appended to the S3
-leaf on disk). They live next to a project's `map/` pieces and are
-produced by the in-game "publish" flow.
+Screenshots are PNGs of a rendered map, stored the same way as tiles: raw PNG
+bytes with no wrapping. They use the `screenshot` piece type and are produced by
+the in-game "publish" flow.
 
 ---
 
 ## 6. `profile/` - per-user key/value blob
 
 
-Every user has exactly one `profile` piece, named `user`, under the
-reserved project `-`, and all user and system folders are under `JGI_test1/`:
+Almost every user has exactly one `profile` piece, named `user`, under the reserved
+project `-`:
 
 ```
-JGI_test1/<username>/-/profile/user
-JGI_test1/<username>/-/profile/user.meta.json
+<username>/-/profile/user
 ```
 
 The body is a **zlib stream** that decompresses to a `writeUTF`

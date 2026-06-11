@@ -41,7 +41,7 @@ Manually redacted PNG bodies are replaced with opaque black PNGs of the same pix
 
 ## Screenshot Propagation
 
-Screenshots are not reviewed manually, but the submit step applies the archive policy from `ARCHIVE.md`:
+Screenshots are not reviewed manually, but the submit step applies the archive policy from [`S3_ARCHIVE.md`](./S3_ARCHIVE.md):
 
 ```text
 redacted tile -> actors whose animationTable references it -> maps whose layers reference those actors -> screenshots of those maps

@@ -18,7 +18,7 @@ From the repository root:
 dotnet tool restore
 dotnet restore mygamebuilder-archive.slnx
 dotnet build mygamebuilder-archive.slnx
-dotnet run --project src/MyGameBuilder.Archive.S3
+dotnet run --project src/MyGameBuilder.Archive.S3 -- capture --bucket JGI_test1 --output archive-work/JGI_test1.sqlite --resume
 dotnet run --project src/MyGameBuilder.Archive.S3.Redactor -- --archive archive-work/JGI_test1.sqlite
 dotnet run --project src/MyGameBuilder.Archive.Frontend -- capture --seeds seeds.txt --output archive-work/frontend.sqlite --resume
 ```
@@ -59,5 +59,5 @@ The full archive is intentionally not stored in git. Place local working archive
 
 ## Frontend Wayback Archiver
 
-See [`FRONTEND.md`](FRONTEND.md) for the frontend seed file format, including
-`exclude` prefixes for areas that should be captured by specialized tools.
+See [`FRONTEND.md`](FRONTEND.md) for how the frontend archive records seeds,
+excludes, Wayback captures, replay bodies, and discovered URLs.
