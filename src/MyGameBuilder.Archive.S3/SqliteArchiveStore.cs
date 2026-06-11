@@ -23,7 +23,10 @@ public sealed class SqliteArchiveStore : IDisposable
         }
 
         CreateStagingTables();
+        MigrateNullableContentTypeIfNeeded();
         ValidateCaptureSchemaCompatibility();
+        ValidateInProgressConsistency();
+        Sqlite.ExecuteNonQuery(_connection, "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA temp_store = MEMORY;");
     }
 
     public bool IsListingComplete() => string.Equals(GetState("listing_complete"), "1", StringComparison.Ordinal);
@@ -56,6 +59,10 @@ public sealed class SqliteArchiveStore : IDisposable
     public long GetDownloadedBytes() => Convert.ToInt64(Sqlite.ExecuteScalar(
         _connection,
         "SELECT coalesce(sum(content_length_bytes), 0) FROM capture_download;") ?? 0);
+
+    public long GetDownloadedMissingContentTypeCount() => Convert.ToInt64(Sqlite.ExecuteScalar(
+        _connection,
+        "SELECT COUNT(*) FROM capture_download WHERE content_type IS NULL;") ?? 0);
 
     public ListedS3Entry? GetFirstLiveEntry()
     {
@@ -189,7 +196,7 @@ public sealed class SqliteArchiveStore : IDisposable
                 );
                 """;
             command.Parameters.AddWithValue("$list_id", download.SourceListOrdinal);
-            command.Parameters.AddWithValue("$content_type", download.ContentType);
+            command.Parameters.AddWithValue("$content_type", (object?)download.ContentType ?? DBNull.Value);
             command.Parameters.AddWithValue("$etag", download.ETag);
             command.Parameters.AddWithValue("$last_modified_utc", FormatUtc(download.LastModifiedUtc));
             command.Parameters.AddWithValue("$content_length_bytes", download.ContentLengthBytes);
@@ -359,9 +366,6 @@ public sealed class SqliteArchiveStore : IDisposable
             DROP TABLE IF EXISTS capture_download;
             DROP TABLE IF EXISTS capture_listing;
             DROP TABLE IF EXISTS capture_state;
-            PRAGMA wal_checkpoint(TRUNCATE);
-            PRAGMA optimize;
-            PRAGMA journal_mode = DELETE;
             """);
     }
 
@@ -459,7 +463,7 @@ public sealed class SqliteArchiveStore : IDisposable
                 list_id INTEGER PRIMARY KEY
                     REFERENCES capture_listing(list_id)
                     ON DELETE CASCADE,
-                content_type TEXT NOT NULL,
+                content_type TEXT NULL,
                 etag TEXT NOT NULL,
                 last_modified_utc TEXT NOT NULL,
                 content_length_bytes INTEGER NOT NULL CHECK (content_length_bytes >= 0),
@@ -478,6 +482,100 @@ public sealed class SqliteArchiveStore : IDisposable
                 PRIMARY KEY(list_id, name, value)
             ) STRICT, WITHOUT ROWID;
             """);
+    }
+
+    private void MigrateNullableContentTypeIfNeeded()
+    {
+        MigrateCaptureDownloadNullableContentTypeIfNeeded();
+        MigrateMainSchemaNullableContentTypeIfNeeded();
+    }
+
+    private void MigrateCaptureDownloadNullableContentTypeIfNeeded()
+    {
+        if (!IsColumnNotNull("capture_download", "content_type"))
+        {
+            return;
+        }
+
+        ExecuteWithForeignKeysDisabled(
+            """
+            BEGIN;
+
+            ALTER TABLE capture_download RENAME TO capture_download_old;
+
+            CREATE TABLE capture_download (
+                list_id INTEGER PRIMARY KEY
+                    REFERENCES capture_listing(list_id)
+                    ON DELETE CASCADE,
+                content_type TEXT NULL,
+                etag TEXT NOT NULL,
+                last_modified_utc TEXT NOT NULL,
+                content_length_bytes INTEGER NOT NULL CHECK (content_length_bytes >= 0),
+                body_sha256 TEXT NOT NULL,
+                body BLOB NOT NULL,
+                downloaded_utc TEXT NOT NULL,
+                CHECK (content_length_bytes = length(body))
+            ) STRICT;
+
+            INSERT INTO capture_download (
+                list_id, content_type, etag, last_modified_utc,
+                content_length_bytes, body_sha256, body, downloaded_utc
+            )
+            SELECT
+                list_id, content_type, etag, last_modified_utc,
+                content_length_bytes, body_sha256, body, downloaded_utc
+            FROM capture_download_old;
+
+            DROP TABLE capture_download_old;
+
+            COMMIT;
+            """);
+    }
+
+    private void MigrateMainSchemaNullableContentTypeIfNeeded()
+    {
+        var createSql = GetCreateSql("s3_entry");
+        if (createSql is null || !createSql.Contains("content_type IS NOT NULL", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var stagingRows = CountRows("SELECT COUNT(*) FROM capture_listing;")
+            + CountRows("SELECT COUNT(*) FROM capture_download;");
+        var finalRows = CountRows("SELECT COUNT(*) FROM s3_object;")
+            + CountRows("SELECT COUNT(*) FROM s3_entry;");
+        if (finalRows > 0 && stagingRows == 0)
+        {
+            throw new ArchiveFatalException(
+                "The archive uses an older schema that required Content-Type, but its capture staging tables are empty. "
+                + "It cannot be safely migrated because the final rows cannot be rebuilt from staging data.");
+        }
+
+        ExecuteWithForeignKeysDisabled(
+            """
+            BEGIN;
+
+            DROP VIEW IF EXISTS v_integrity_live_entry_without_mgb_key;
+            DROP VIEW IF EXISTS v_integrity_object_without_current;
+            DROP VIEW IF EXISTS v_mgb_all_piece_versions;
+            DROP VIEW IF EXISTS v_mgb_current_pieces;
+            DROP VIEW IF EXISTS v_s3_all_bodies;
+            DROP VIEW IF EXISTS v_s3_current_bodies;
+            DROP VIEW IF EXISTS v_s3_current_live_entries;
+            DROP VIEW IF EXISTS v_s3_current_entries;
+            DROP VIEW IF EXISTS v_s3_all_entries;
+
+            DROP TABLE IF EXISTS s3_user_metadata_extra;
+            DROP TABLE IF EXISTS s3_response_header;
+            DROP TABLE IF EXISTS mgb_key_part;
+            DROP TABLE IF EXISTS s3_entry;
+            DROP TABLE IF EXISTS s3_object;
+            DROP TABLE IF EXISTS archive_info;
+
+            COMMIT;
+            """);
+
+        Sqlite.ExecuteNonQuery(_connection, LoadEmbeddedSchema());
     }
 
     private void ValidateCaptureSchemaCompatibility()
@@ -520,12 +618,135 @@ public sealed class SqliteArchiveStore : IDisposable
         }
     }
 
+    private void ValidateInProgressConsistency()
+    {
+        var quickCheck = Sqlite.ExecuteScalar(_connection, "PRAGMA quick_check;") as string;
+        if (!string.Equals(quickCheck, "ok", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArchiveFatalException("The in-progress SQLite archive did not pass PRAGMA quick_check: " + quickCheck);
+        }
+
+        var danglingDownloads = Convert.ToInt64(Sqlite.ExecuteScalar(
+            _connection,
+            """
+            SELECT COUNT(*)
+            FROM capture_download d
+            LEFT JOIN capture_listing l ON l.list_id = d.list_id
+            WHERE l.list_id IS NULL;
+            """) ?? 0);
+        if (danglingDownloads != 0)
+        {
+            throw new ArchiveFatalException($"The in-progress archive has {danglingDownloads} downloaded rows without matching listing rows.");
+        }
+
+        var deleteMarkerDownloads = Convert.ToInt64(Sqlite.ExecuteScalar(
+            _connection,
+            """
+            SELECT COUNT(*)
+            FROM capture_download d
+            JOIN capture_listing l ON l.list_id = d.list_id
+            WHERE l.is_delete_marker = 1;
+            """) ?? 0);
+        if (deleteMarkerDownloads != 0)
+        {
+            throw new ArchiveFatalException($"The in-progress archive has {deleteMarkerDownloads} downloaded rows for delete markers.");
+        }
+
+        if (!IsListingComplete())
+        {
+            return;
+        }
+
+        RequireStateEquals("listing_count", GetListingCount());
+        RequireStateEquals("live_entry_count", GetLiveCount());
+        RequireStateEquals("delete_marker_count", GetDeleteMarkerCount());
+        RequireStateEquals("listed_content_bytes", GetListedContentBytes());
+
+        var fingerprint = GetListingFingerprint();
+        if (fingerprint is null || fingerprint.Length != 64 || fingerprint.Any(static c => !Uri.IsHexDigit(c)))
+        {
+            throw new ArchiveFatalException("The in-progress archive is marked listing-complete but has an invalid listing fingerprint.");
+        }
+    }
+
+    private void RequireStateEquals(string stateName, long actual)
+    {
+        var value = GetState(stateName);
+        if (!long.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var expected))
+        {
+            throw new ArchiveFatalException($"The in-progress archive is missing or has an invalid capture_state value for '{stateName}'.");
+        }
+
+        if (expected != actual)
+        {
+            throw new ArchiveFatalException($"The in-progress archive capture_state '{stateName}' is {expected}, but the staging tables contain {actual}.");
+        }
+    }
+
     private bool MainSchemaExists()
     {
         using var command = _connection.CreateCommand();
         command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'archive_info';";
         return Convert.ToInt64(command.ExecuteScalar() ?? 0) > 0;
     }
+
+    private bool IsColumnNotNull(string tableName, string columnName)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info({QuoteIdentifier(tableName)});";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.Ordinal))
+            {
+                return reader.GetInt64(3) != 0;
+            }
+        }
+
+        throw new ArchiveFatalException($"SQLite table '{tableName}' is missing required column '{columnName}'.");
+    }
+
+    private string? GetCreateSql(string objectName)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT sql
+            FROM sqlite_master
+            WHERE name = $name;
+            """;
+        command.Parameters.AddWithValue("$name", objectName);
+        return command.ExecuteScalar() as string;
+    }
+
+    private long CountRows(string sql) => Convert.ToInt64(Sqlite.ExecuteScalar(_connection, sql) ?? 0);
+
+    private void ExecuteWithForeignKeysDisabled(string sql)
+    {
+        Sqlite.ExecuteNonQuery(_connection, "PRAGMA foreign_keys = OFF;");
+        try
+        {
+            Sqlite.ExecuteNonQuery(_connection, sql);
+        }
+        catch
+        {
+            try
+            {
+                Sqlite.ExecuteNonQuery(_connection, "ROLLBACK;");
+            }
+            catch (SqliteException)
+            {
+            }
+
+            throw;
+        }
+        finally
+        {
+            Sqlite.ExecuteNonQuery(_connection, "PRAGMA foreign_keys = ON;");
+        }
+    }
+
+    private static string QuoteIdentifier(string value) => "\"" + value.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
 
     private static ListedS3Entry ReadListedEntry(SqliteDataReader reader)
     {
@@ -609,7 +830,7 @@ public sealed class SqliteArchiveStore : IDisposable
     private static string LoadEmbeddedSchema()
     {
         var assembly = Assembly.GetExecutingAssembly();
-        var resourceName = assembly.GetManifestResourceNames().Single(name => name.EndsWith("schema-draft.sql", StringComparison.Ordinal));
+        var resourceName = assembly.GetManifestResourceNames().Single(name => name.EndsWith("schema.sql", StringComparison.Ordinal));
         using var stream = assembly.GetManifestResourceStream(resourceName)
             ?? throw new ArchiveFatalException("Embedded SQLite schema resource was not found.");
         using var reader = new StreamReader(stream);

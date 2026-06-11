@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 
 namespace MyGameBuilder.Archive.S3;
@@ -89,6 +90,7 @@ public sealed class CaptureWorkflow(
         store.DropStagingTables();
         store.Dispose();
         Sqlite.ClearPools();
+        FinalizeStandaloneSqliteFile(InProgressPath);
         EnsureNoSqliteSidecars(InProgressPath);
 
         PublishFinalFile();
@@ -201,13 +203,15 @@ public sealed class CaptureWorkflow(
         var liveCount = store.GetLiveCount();
         var downloaded = store.GetDownloadedLiveCount();
         var downloadedBytes = store.GetDownloadedBytes();
+        var missingContentTypes = store.GetDownloadedMissingContentTypeCount();
         var listedBytes = store.GetListedContentBytes();
         logger.LogInformation(
-            "Downloading object bodies: {Downloaded}/{Total} objects and {DownloadedBytes}/{ListedBytes} bytes already complete",
+            "Downloading object bodies: {Downloaded}/{Total} objects and {DownloadedBytes}/{ListedBytes} bytes already complete ({MissingContentTypes} missing Content-Type)",
             downloaded,
             liveCount,
             downloadedBytes,
-            listedBytes);
+            listedBytes,
+            missingContentTypes);
 
         while (downloaded < liveCount)
         {
@@ -232,14 +236,27 @@ public sealed class CaptureWorkflow(
                     store.InsertDownload(item);
                     downloaded++;
                     downloadedBytes += item.ContentLengthBytes;
+                    if (item.ContentType is null)
+                    {
+                        missingContentTypes++;
+                        if (missingContentTypes <= 10 || missingContentTypes % 1_000 == 0)
+                        {
+                            logger.LogInformation(
+                                "Recorded {MissingContentTypes} live objects with no Content-Type header; latest key: {Key}",
+                                missingContentTypes,
+                                item.Key);
+                        }
+                    }
+
                     if (downloaded % 10_000 == 0 || downloaded == liveCount)
                     {
                         logger.LogInformation(
-                            "Downloaded {Downloaded}/{Total} live objects ({DownloadedBytes}/{ListedBytes} bytes)",
+                            "Downloaded {Downloaded}/{Total} live objects ({DownloadedBytes}/{ListedBytes} bytes, {MissingContentTypes} missing Content-Type)",
                             downloaded,
                             liveCount,
                             downloadedBytes,
-                            listedBytes);
+                            listedBytes,
+                            missingContentTypes);
                     }
                 }
             }, cancellationToken);
@@ -383,6 +400,53 @@ public sealed class CaptureWorkflow(
         if (sidecars.Length != 0)
         {
             throw new ArchiveFatalException("SQLite sidecar files remained after finalization: " + string.Join(", ", sidecars));
+        }
+    }
+
+    private static void FinalizeStandaloneSqliteFile(string databasePath)
+    {
+        using (var connection = Sqlite.Open(databasePath))
+        {
+            RequireWalCheckpoint(connection);
+            var journalMode = Sqlite.ExecuteScalar(connection, "PRAGMA journal_mode = DELETE;") as string;
+            if (!string.Equals(journalMode, "delete", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArchiveFatalException($"SQLite refused to switch the final archive to DELETE journal mode; current mode is '{journalMode}'.");
+            }
+
+            Sqlite.ExecuteNonQuery(connection, "PRAGMA optimize;");
+        }
+
+        Sqlite.ClearPools();
+        foreach (var sidecar in new[] { databasePath + "-wal", databasePath + "-shm" })
+        {
+            if (!File.Exists(sidecar))
+            {
+                continue;
+            }
+
+            var info = new FileInfo(sidecar);
+            if (info.Length == 0)
+            {
+                info.Delete();
+            }
+        }
+    }
+
+    private static void RequireWalCheckpoint(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+        using var reader = command.ExecuteReader();
+        if (!reader.Read())
+        {
+            throw new ArchiveFatalException("SQLite did not return a WAL checkpoint result.");
+        }
+
+        var busy = reader.GetInt64(0);
+        if (busy != 0)
+        {
+            throw new ArchiveFatalException("SQLite WAL checkpoint could not complete because another connection is using the archive.");
         }
     }
 }

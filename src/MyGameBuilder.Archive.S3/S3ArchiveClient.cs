@@ -107,7 +107,7 @@ public sealed class S3ArchiveClient(HttpClient httpClient, Uri endpoint, string 
         var contentType = response.Content.Headers.ContentType?.ToString();
         if (string.IsNullOrWhiteSpace(contentType))
         {
-            throw new ArchiveFatalException($"GetObject response for '{entry.Key}' did not include Content-Type.");
+            contentType = null;
         }
 
         return new DownloadedObject(

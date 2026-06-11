@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "MyGameBuilder.Archive.S3": {
+      "commandName": "Project",
+      "commandLineArgs": "capture --bucket JGI_test1 --output archive.sqlite --resume"
+    }
+  }
+}

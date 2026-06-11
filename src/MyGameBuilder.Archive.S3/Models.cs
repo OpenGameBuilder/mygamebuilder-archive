@@ -70,7 +70,7 @@ public sealed record DownloadedObject(
     long SourceListOrdinal,
     string Key,
     string? RawVersionId,
-    string ContentType,
+    string? ContentType,
     string ETag,
     DateTimeOffset LastModifiedUtc,
     long ContentLengthBytes,

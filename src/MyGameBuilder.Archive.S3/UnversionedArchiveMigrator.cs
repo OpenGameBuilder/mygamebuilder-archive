@@ -216,7 +216,7 @@ public static class UnversionedArchiveMigrator
             INSERT INTO archive_info(name, value)
             VALUES
                 ('schema', 'mgb-jgi-test1-unversioned-archive'),
-                ('schema_version', '1'),
+                ('schema_version', '2'),
                 ('source_archive_path', $source_archive_path),
                 ('source_archive_schema', coalesce((SELECT value FROM source.archive_info WHERE name = 'schema'), 'unknown')),
                 ('source_archive_listing_fingerprint_sha256', coalesce((SELECT value FROM source.archive_info WHERE name = 'listing_fingerprint_sha256'), 'unknown')),
@@ -410,7 +410,7 @@ public static class UnversionedArchiveMigrator
             key_text TEXT NOT NULL COLLATE BINARY,
             key_utf8 BLOB NOT NULL,
             last_modified_utc TEXT NOT NULL COLLATE BINARY,
-            content_type TEXT NOT NULL COLLATE BINARY,
+            content_type TEXT NULL COLLATE BINARY,
             etag TEXT NOT NULL COLLATE BINARY,
             storage_class TEXT NULL COLLATE BINARY,
             content_length_bytes INTEGER NOT NULL CHECK (content_length_bytes >= 0),

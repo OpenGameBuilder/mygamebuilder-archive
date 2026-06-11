@@ -12,11 +12,10 @@
     <File Path="README.md" />
   </Folder>
   <Folder Name="/docs/">
-    <File Path="docs/ARCHIVE.md" />
     <File Path="docs/DEVELOPMENT.md" />
     <File Path="docs/FRONTEND.md" />
     <File Path="docs/FORMATS.md" />
-    <File Path="docs/schema-draft.sql" />
+    <File Path="docs/S3_ARCHIVE.md" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/MyGameBuilder.Archive.Frontend/MyGameBuilder.Archive.Frontend.csproj" />
