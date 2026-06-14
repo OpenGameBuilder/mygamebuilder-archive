@@ -18,16 +18,16 @@ From the repository root:
 dotnet tool restore
 dotnet restore mygamebuilder-archive.slnx
 dotnet build mygamebuilder-archive.slnx
-dotnet run --project src/MyGameBuilder.Archive.S3 -- capture --bucket JGI_test1 --output archive-work/JGI_test1.sqlite --resume
-dotnet run --project src/MyGameBuilder.Archive.S3.Redactor -- --archive archive-work/JGI_test1.sqlite
-dotnet run --project src/MyGameBuilder.Archive.Frontend -- capture --seeds seeds.txt --output archive-work/frontend.sqlite --resume
+dotnet run --project src/OpenGameBuilder.Mgb.Archive.S3Archiver -- capture --bucket JGI_test1 --output archive-work/JGI_test1.sqlite --resume
+dotnet run --project src/OpenGameBuilder.Mgb.Archive.S3Redactor -- --archive archive-work/JGI_test1.sqlite
+dotnet run --project src/OpenGameBuilder.Mgb.Archive.ClientArchiver -- capture --seeds seeds.txt --output archive-work/frontend.sqlite --resume
 ```
 
 ## Visual Studio
 
 1. Open [`../mygamebuilder-archive.slnx`](../mygamebuilder-archive.slnx).
 2. Let Visual Studio install missing components from [`../.vsconfig`](../.vsconfig) if prompted.
-3. Set `MyGameBuilder.Archive.S3`, `MyGameBuilder.Archive.S3.Redactor`, or `MyGameBuilder.Archive.Frontend` as the startup project.
+3. Set `OpenGameBuilder.Mgb.Archive.S3Archiver`, `OpenGameBuilder.Mgb.Archive.S3Redactor`, or `OpenGameBuilder.Mgb.Archive.ClientArchiver` as the startup project.
 4. Press F5.
 
 ## VS Code
@@ -48,7 +48,7 @@ Useful tasks are available from **Terminal: Run Task**:
 Run the redactor against a completed SQLite archive:
 
 ```pwsh
-dotnet run --project src/MyGameBuilder.Archive.S3.Redactor -- --archive archive-work/JGI_test1.sqlite
+dotnet run --project src/OpenGameBuilder.Mgb.Archive.S3Redactor -- --archive archive-work/JGI_test1.sqlite
 ```
 
 The app creates a resumable sidecar review database beside the archive by default. You can close the browser or stop the app at any time; scan progress, reviewed decisions, and the current position are restored when the app restarts with the same archive and review sidecar.
@@ -60,4 +60,4 @@ The full archive is intentionally not stored in git. Place local working archive
 ## Frontend Wayback Archiver
 
 See [`FRONTEND.md`](FRONTEND.md) for how the frontend archive records seeds,
-excludes, Wayback captures, replay bodies, and discovered URLs.
+excludes, Wayback captures, replay bodies, and URL canonicalization.

@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "OpenGameBuilder.Mgb.Archive.S3Archiver": {
+      "commandName": "Project",
+      "commandLineArgs": "split-file --input \"C:\\Users\\User\\Documents\\mgb-local-test\\archive.sqlite\" --zstd"
+    }
+  }
+}

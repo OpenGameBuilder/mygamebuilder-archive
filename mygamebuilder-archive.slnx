@@ -18,13 +18,13 @@
     <File Path="docs/S3_ARCHIVE.md" />
   </Folder>
   <Folder Name="/src/">
-    <Project Path="src/MyGameBuilder.Archive.Frontend/MyGameBuilder.Archive.Frontend.csproj" />
-    <Project Path="src/MyGameBuilder.Archive.S3/MyGameBuilder.Archive.S3.csproj" />
-    <Project Path="src/MyGameBuilder.Archive.S3.Redactor/MyGameBuilder.Archive.S3.Redactor.csproj" />
+    <Project Path="src/OpenGameBuilder.Mgb.Archive.ClientArchiver/OpenGameBuilder.Mgb.Archive.ClientArchiver.csproj" />
+    <Project Path="src/OpenGameBuilder.Mgb.Archive.S3Redactor/OpenGameBuilder.Mgb.Archive.S3Redactor.csproj" />
+    <Project Path="src/OpenGameBuilder.Mgb.Archive.S3Archiver/OpenGameBuilder.Mgb.Archive.S3Archiver.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/MyGameBuilder.Archive.Frontend.Tests/MyGameBuilder.Archive.Frontend.Tests.csproj" />
-    <Project Path="tests/MyGameBuilder.Archive.S3.Redactor.Tests/MyGameBuilder.Archive.S3.Redactor.Tests.csproj" />
-    <Project Path="tests/MyGameBuilder.Archive.S3.Tests/MyGameBuilder.Archive.S3.Tests.csproj" />
+    <Project Path="tests/OpenGameBuilder.Mgb.Archive.ClientArchiver.Tests/OpenGameBuilder.Mgb.Archive.ClientArchiver.Tests.csproj" />
+    <Project Path="tests/OpenGameBuilder.Mgb.Archive.S3Redactor.Tests/OpenGameBuilder.Mgb.Archive.S3Redactor.Tests.csproj" />
+    <Project Path="tests/OpenGameBuilder.Mgb.Archive.S3Archiver.Tests/OpenGameBuilder.Mgb.Archive.S3Archiver.Tests.csproj" />
   </Folder>
 </Solution>

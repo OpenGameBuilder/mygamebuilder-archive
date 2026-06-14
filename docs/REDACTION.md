@@ -1,13 +1,13 @@
 # S3 Archive Redaction Review
 
-`MyGameBuilder.Archive.S3.Redactor` is a local web app for manually reviewing PNG objects that may contain identifiable photographs of real people. It produces a new SQLite archive database, leaving the source database unchanged.
+`OpenGameBuilder.Mgb.Archive.S3Redactor` is a local web app for manually reviewing PNG objects that may contain identifiable photographs of real people. It produces a new SQLite archive database, leaving the source database unchanged.
 
 ## Run
 
 From the repository root:
 
 ```pwsh
-dotnet run --project src/MyGameBuilder.Archive.S3.Redactor -- --archive archive-work/JGI_test1.sqlite
+dotnet run --project src/OpenGameBuilder.Mgb.Archive.S3Redactor -- --archive archive-work/JGI_test1.sqlite
 ```
 
 Optional arguments:

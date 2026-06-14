@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "OpenGameBuilder.Mgb.Archive.ClientArchiver": {
+      "commandName": "Project",
+      "commandLineArgs": "capture --seeds \"C:\\Users\\User\\Documents\\seeds.txt\" --output archive-work0/frontend.sqlite --resume --retry-replay-errors --concurrency 2"
+    }
+  }
+}

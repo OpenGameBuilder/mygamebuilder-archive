@@ -1,9 +1,10 @@
 # MyGameBuilder Frontend Archive
 
 The frontend archive preserves historical public web files for MyGameBuilder as
-captured by the Internet Archive Wayback Machine. It is distributed as a
-standalone SQLite database of timestamped Wayback captures, not as a cleaned
-static website folder.
+captured by the Internet Archive Wayback Machine, plus current live captures for
+explicit URL seeds and URLs discovered in downloaded bodies. It is distributed
+as a standalone SQLite database of timestamped captures, not as a cleaned static
+website folder.
 
 This archive is separate from the S3 content archive. The S3 archive preserves
 user-generated game pieces from `JGI_test1`; the frontend archive preserves the
@@ -22,15 +23,17 @@ Depending on the seed file used for a release, captured resources may include:
 - The original `MGB.swf` client file.
 - JavaScript, CSS, images, music, and other assets referenced by captured
   pages or binaries.
-- Historical redirects, missing pages, and non-200 responses when Wayback
-  reported them.
+- Historical redirects and non-200 responses when Wayback reported them for a
+  resource that also had at least one non-error CDX capture.
+- Current live responses for non-excluded raw `url` seeds and non-excluded URLs
+  discovered while downloading archived bodies.
 
 The archive stores timestamped captures. A single URL can have many captured
 versions, and several captures can point at the same deduplicated body.
 
 ## Provenance
 
-The source is the Internet Archive Wayback Machine:
+The primary source is the Internet Archive Wayback Machine:
 
 - CDX metadata is enumerated through the Wayback CDX API.
 - Replay bodies are downloaded through raw `id_` replay URLs in this form:
@@ -40,7 +43,7 @@ https://web.archive.org/web/{timestamp}id_/{original-url}
 ```
 
 The database records the CDX endpoint, Wayback replay endpoint, seed file path,
-seed file SHA-256, seed rows, excluded prefixes, capture counts, replay error
+seed file SHA-256, seed rows, excluded URL rules, capture counts, replay error
 counts, and creation time in `archive_info`.
 
 Each CDX row is stored with its original URL, timestamp, MIME type, status code,
@@ -48,26 +51,51 @@ digest, length, redirect target, and raw JSON row. Each replay attempt records
 the replay URL, replay status, headers, body hash, and body bytes when the body
 was available.
 
+After Wayback replay downloads complete, the archiver performs a direct live
+capture pass for every raw `url` seed and every non-excluded URL discovered in
+successfully downloaded replay bodies. These live captures use the current UTC
+timestamp at archive creation time, store the final downloaded body, and preserve
+the live response URL, status, headers, hash, and bytes in the same replay
+fields used for Wayback captures.
+
 ## How It Was Archived
 
 The capture process is intentionally conservative:
 
 1. Read a seed file containing domains, URL prefixes, exact URLs, and optional
-   exclude prefixes.
+   exclude rules.
 2. Query CDX for every seed, paging with Wayback resume keys until each seed is
    complete.
 3. Store every accepted CDX row. Excluded rows are skipped, and the exclude
    rules are kept in the database for transparency.
-4. Download each accepted capture through raw Wayback replay.
-5. Store replay headers and bodies. Bodies are deduplicated by SHA-256, but
+4. Drop resources whose CDX captures all have HTTP error status codes, such as
+   404 or 500. Resources with at least one non-error CDX capture are kept.
+5. Download each accepted capture through raw Wayback replay.
+6. Store replay headers and bodies. Bodies are deduplicated by SHA-256, but
    every timestamped capture remains present.
-6. Scan downloaded bodies for URL-like strings so later archival passes can
-   discover additional assets.
-7. Validate the database and finalize it as a single read-only SQLite file.
+7. Scan successful replay bodies for linked URLs and apphost asset references.
+8. Directly capture every non-excluded discovered URL, plus every non-excluded
+   raw `url` seed, from the live web as it exists during the run.
+9. Validate the database and finalize it as a single read-only SQLite file.
 
 Excludes are prefix-based and compare both canonical URL form and host/path
 form, so an exclude such as `https://mygamebuilder.com/forum/` also excludes
 matching historical `http://mygamebuilder.com/forum/...` captures.
+Excludes are applied to both the captured original URL and any CDX redirect
+target, so a capture for an allowed URL is skipped if Wayback reports that it
+redirected into an excluded scope.
+Replay downloads do not follow HTTP redirects; if the replay response itself
+redirects into an excluded scope, that capture is skipped too. Direct live
+captures follow allowed redirects to the final live response, but stop and skip
+the capture if any redirect target enters an excluded scope.
+Use `exclude https://v2.mygamebuilder.com/` to skip a whole subdomain. Use
+`exclude-contains forum` to skip any CDX URL containing `forum`, regardless of
+where that text appears in the URL.
+
+Canonical resource identity treats `http` and `https` as equivalent and also
+treats a leading `www.` host label as equivalent to the bare host. For example,
+`https://www.mygamebuilder.com/play/` and `http://mygamebuilder.com/play/`
+share one canonical resource key.
 
 ## The SQLite Archive
 
@@ -76,15 +104,13 @@ Important tables and views:
 - `archive_info` records provenance, counts, endpoints, seed identity, and
   schema identity.
 - `frontend_seed` records every seed line and its generated CDX query.
-- `frontend_exclude` records excluded URL prefixes.
+- `frontend_exclude` records excluded URL rules.
 - `frontend_resource` records canonical URLs. Canonicalization lowercases
-  scheme and host, removes default ports, and drops fragments.
+  hosts, normalizes `http` and `https` to one identity, strips a leading `www.`,
+  removes default ports, and drops fragments.
 - `frontend_capture` records each timestamped CDX capture and replay result.
 - `frontend_content` stores deduplicated replay body bytes by SHA-256.
 - `frontend_response_header` preserves replay response headers in order.
-- `frontend_discovered_url` records URL-like references found inside bodies.
-- `frontend_discovered_url_source` links discovered URLs back to the captures
-  and bodies where they were seen.
 - `v_frontend_capture_lookup` joins resource identity with capture metadata for
   historical lookup.
 
@@ -92,6 +118,7 @@ The archive schema is identified by:
 
 ```text
 archive_info.schema = mgb-frontend-wayback-archive
+archive_info.schema_version = 2
 ```
 
 ## Opening And Browsing
@@ -128,7 +155,7 @@ SELECT
     c.replay_error,
     c.content_id
 FROM v_frontend_capture_lookup c
-WHERE c.canonical_url = 'https://www.mygamebuilder.com/'
+WHERE c.canonical_url = 'http://mygamebuilder.com/'
   AND c.capture_timestamp <= '20120101000000'
 ORDER BY c.capture_timestamp DESC, c.capture_id DESC
 LIMIT 1;
@@ -146,9 +173,8 @@ site. The body stored in `frontend_content` is the byte sequence returned by the
 Wayback raw replay request at capture time.
 
 The only derived data added by the archiver is metadata around the capture:
-canonical URLs, replay hashes, replay headers, deduplicated content references,
-and discovered URL references. The discovered URL data is an index for finding
-more archival targets; it does not modify the captured content.
+canonical URLs, replay hashes, replay headers, and deduplicated content
+references.
 
 ## Limitations
 
